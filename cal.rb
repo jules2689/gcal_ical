@@ -47,6 +47,7 @@ class CalendarApp
           e.description  = event.description
           e.ip_class     = event.visibility.upcase
           e.url          = event.html_link
+          e.status       = event.status
         end
       end
     
