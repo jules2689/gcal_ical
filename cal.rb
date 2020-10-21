@@ -7,6 +7,15 @@ require 'rack'
 require 'rack/server'
 require_relative 'basic_auth'
 
+Dotenv.require_keys(
+  "TIMEZONE",
+  "CLIENT_ID",
+  "CLIENT_SECRET",
+  "CALENDAR",
+  "USERNAME",
+  "PASSWORD",
+)
+
 class CalendarApp
   def initialize(cal)
     @cal = cal
