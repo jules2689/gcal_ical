@@ -17,8 +17,37 @@ Dotenv.require_keys(
 )
 
 class CalendarApp
-  def initialize(cal)
-    @cal = cal
+  def self.get_google_calendar
+    cal = Google::Calendar.new(
+      client_id: ENV["CLIENT_ID"],
+      client_secret: ENV["CLIENT_SECRET"],
+      calendar: ENV["CALENDAR"],
+      redirect_url: "urn:ietf:wg:oauth:2.0:oob" # this is what Google uses for 'applications'
+    )
+
+    refresh_token = ENV["REFRESH_TOKEN"]
+
+    if refresh_token.nil?
+      # A user needs to approve access in order to work with their calendars.
+      puts "Visit the following web page in your browser and approve access."
+      puts cal.authorize_url
+      puts "\nCopy the code that Google returned and paste it here:"
+
+      # Pass the ONE TIME USE access code here to login and get a refresh token that you can use for access from now on.
+      refresh_token = cal.login_with_auth_code( $stdin.gets.chomp )
+
+      puts "\nMake sure you SAVE YOUR REFRESH TOKEN to `.env` under `REFRESH_TOKEN` so you don't have to prompt the user to approve access again."
+      puts "Your refresh token is:\n\t#{refresh_token}\n"
+      puts "Press return to continue"
+      $stdin.gets.chomp
+    else
+      cal.login_with_refresh_token(refresh_token)
+    end
+
+    cal
+  end
+
+  def initialize
     @cache = ActiveSupport::Cache::MemoryStore.new(expires_in: 5.minutes)
   end
 
@@ -37,7 +66,7 @@ class CalendarApp
       max_time = (Time.now + (86400 * 7)).end_of_day
     
       icalendar = Icalendar::Calendar.new
-      @cal.find_events_in_range(min_time, max_time).each do |event|
+      CalendarApp.get_google_calendar&.find_events_in_range(min_time, max_time).each do |event|
         start_time = Time.parse(event.start_time)
         end_time = Time.parse(event.end_time)
         icalendar.event do |e|
@@ -56,38 +85,12 @@ class CalendarApp
   end
 end
 
-def get_google_calendar
-  cal = Google::Calendar.new(
-    client_id: ENV["CLIENT_ID"],
-    client_secret: ENV["CLIENT_SECRET"],
-    calendar: ENV["CALENDAR"],
-    redirect_url: "urn:ietf:wg:oauth:2.0:oob" # this is what Google uses for 'applications'
-  )
-
-  refresh_token = ENV["REFRESH_TOKEN"]
-
-  if refresh_token.nil?
-    # A user needs to approve access in order to work with their calendars.
-    puts "Visit the following web page in your browser and approve access."
-    puts cal.authorize_url
-    puts "\nCopy the code that Google returned and paste it here:"
-
-    # Pass the ONE TIME USE access code here to login and get a refresh token that you can use for access from now on.
-    refresh_token = cal.login_with_auth_code( $stdin.gets.chomp )
-
-    puts "\nMake sure you SAVE YOUR REFRESH TOKEN to `.env` under `REFRESH_TOKEN` so you don't have to prompt the user to approve access again."
-    puts "Your refresh token is:\n\t#{refresh_token}\n"
-    puts "Press return to continue"
-    $stdin.gets.chomp
-  else
-    cal.login_with_refresh_token(refresh_token)
-  end
-
-  cal
+if ENV["REFRESH_TOKEN"].nil?
+  CalendarApp.get_google_calendar
 end
 
 app = Rack::Builder.new do |builder|
   builder.use BasicAuth
-  builder.run CalendarApp.new(get_google_calendar)
+  builder.run CalendarApp.new
 end
 Rack::Server.start(app: app)
